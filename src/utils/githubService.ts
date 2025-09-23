@@ -12,7 +12,7 @@ interface GitHubUser {
 }
 
 export class GitHubService {
-  private static readonly CLIENT_ID = 'your_github_oauth_client_id'; // This would be set via environment
+  private static readonly CLIENT_ID = 'Ov23liQQhCTZndrCtqCL'; // GitHub OAuth App for Interview Prep
   private static readonly REDIRECT_URI = window.location.origin + '/auth/github/callback';
   private static readonly SCOPE = 'repo';
 
