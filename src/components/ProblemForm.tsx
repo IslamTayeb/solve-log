@@ -1,16 +1,20 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Download, Globe, Code, FileText } from "lucide-react";
+import { Download, Globe, Code, FileText, Github } from "lucide-react";
+import { URLParser, ProblemInfo } from "@/utils/urlParser";
+import { GitHubService } from "@/utils/githubService";
 
-interface ProblemData {
-  title: string;
-  description: string;
-  url: string;
+interface GitHubRepo {
+  id: number;
+  name: string;
+  full_name: string;
+  private: boolean;
 }
 
 export const ProblemForm = () => {
@@ -18,8 +22,24 @@ export const ProblemForm = () => {
   const [solution, setSolution] = useState("");
   const [notes, setNotes] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [problemData, setProblemData] = useState<ProblemData | null>(null);
+  const [problemInfo, setProblemInfo] = useState<ProblemInfo | null>(null);
+  const [githubRepos, setGithubRepos] = useState<GitHubRepo[]>([]);
+  const [selectedRepo, setSelectedRepo] = useState<string>("IslamTayeb/islam-x-neetcode-150");
+  const [isGithubConnected, setIsGithubConnected] = useState(false);
   const { toast } = useToast();
+
+  useEffect(() => {
+    const checkGitHubAuth = async () => {
+      const token = GitHubService.getAccessToken();
+      if (token) {
+        setIsGithubConnected(true);
+        const repos = await GitHubService.getUserRepos();
+        setGithubRepos(repos);
+      }
+    };
+    
+    checkGitHubAuth();
+  }, []);
 
   const handleFetchProblem = async () => {
     if (!url.trim()) {
@@ -33,44 +53,39 @@ export const ProblemForm = () => {
 
     setIsLoading(true);
     try {
-      // Here we would normally fetch from the website
-      // For now, let's simulate with a basic implementation
-      const response = await fetch(`/api/fetch-problem?url=${encodeURIComponent(url)}`);
+      const info = URLParser.extractProblemInfo(url);
       
-      if (!response.ok) {
-        throw new Error("Failed to fetch problem");
+      if (info) {
+        setProblemInfo(info);
+        toast({
+          title: "Problem Parsed",
+          description: `Successfully extracted info for ${info.title} from ${info.platform}`,
+        });
+      } else {
+        toast({
+          title: "Unsupported URL",
+          description: "Please enter a valid LeetCode or NeetCode URL",
+          variant: "destructive",
+        });
       }
-
-      const data = await response.json();
-      setProblemData(data);
-      
-      toast({
-        title: "Problem Fetched",
-        description: "Successfully extracted problem information",
-      });
     } catch (error) {
-      // Fallback: extract title from URL
-      const urlObj = new URL(url);
-      const pathParts = urlObj.pathname.split('/').filter(Boolean);
-      const title = pathParts[pathParts.length - 1]?.replace(/-/g, ' ') || 'Problem';
-      
-      setProblemData({
-        title: title.charAt(0).toUpperCase() + title.slice(1),
-        description: "Problem description will be extracted from the provided URL",
-        url: url
-      });
-      
       toast({
-        title: "Basic Info Extracted",
-        description: "Using URL-based title extraction. Full scraping would require backend setup.",
+        title: "Error",
+        description: "Failed to parse the problem URL",
+        variant: "destructive",
       });
     } finally {
       setIsLoading(false);
     }
   };
 
-  const generatePythonFile = () => {
-    if (!problemData || !solution.trim()) {
+  const handleGitHubAuth = () => {
+    const authUrl = GitHubService.getAuthUrl();
+    window.open(authUrl, '_blank', 'width=600,height=700');
+  };
+
+  const generateAndCommitFile = async () => {
+    if (!problemInfo || !solution.trim()) {
       toast({
         title: "Missing Information",
         description: "Please fetch a problem and add your solution first",
@@ -79,13 +94,79 @@ export const ProblemForm = () => {
       return;
     }
 
-    const fileName = problemData.title.toLowerCase().replace(/[^a-z0-9]/g, '_') + '.py';
-    const content = `"""
-${problemData.title}
-${problemData.url}
+    if (!isGithubConnected) {
+      toast({
+        title: "GitHub Not Connected",
+        description: "Please connect to GitHub first",
+        variant: "destructive",
+      });
+      return;
+    }
 
-Problem Description:
-${problemData.description}
+    const fileName = URLParser.titleToCamelCase(problemInfo.title) + '.py';
+    const content = `"""
+${problemInfo.title}
+${problemInfo.url}
+
+Platform: ${problemInfo.platform}
+"""
+
+# Solution
+${solution}
+
+${notes ? `\n# Notes\n# ${notes.split('\n').join('\n# ')}` : ''}
+`;
+
+    const commitMessage = GitHubService.formatCommitMessage(problemInfo.title);
+    
+    setIsLoading(true);
+    try {
+      const success = await GitHubService.createFile(
+        selectedRepo,
+        fileName,
+        content,
+        commitMessage
+      );
+
+      if (success) {
+        toast({
+          title: "Success",
+          description: `Committed ${fileName} to ${selectedRepo}`,
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to commit file to GitHub",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to commit file to GitHub",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const downloadFile = () => {
+    if (!problemInfo || !solution.trim()) {
+      toast({
+        title: "Missing Information",
+        description: "Please fetch a problem and add your solution first",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const fileName = URLParser.titleToCamelCase(problemInfo.title) + '.py';
+    const content = `"""
+${problemInfo.title}
+${problemInfo.url}
+
+Platform: ${problemInfo.platform}
 """
 
 # Solution
@@ -105,7 +186,7 @@ ${notes ? `\n# Notes\n# ${notes.split('\n').join('\n# ')}` : ''}
     URL.revokeObjectURL(downloadUrl);
 
     toast({
-      title: "File Generated",
+      title: "File Downloaded",
       description: `Downloaded ${fileName} successfully`,
     });
   };
@@ -154,10 +235,11 @@ ${notes ? `\n# Notes\n# ${notes.split('\n').join('\n# ')}` : ''}
               {isLoading ? "Fetching..." : "Fetch Problem"}
             </Button>
             
-            {problemData && (
+            {problemInfo && (
               <div className="mt-4 p-4 bg-code rounded-lg">
-                <h4 className="font-semibold text-code-foreground mb-2">{problemData.title}</h4>
-                <p className="text-sm text-muted-foreground">{problemData.description}</p>
+                <h4 className="font-semibold text-code-foreground mb-2">{problemInfo.title}</h4>
+                <p className="text-sm text-muted-foreground">Platform: {problemInfo.platform}</p>
+                <p className="text-xs text-muted-foreground mt-1">File: {URLParser.titleToCamelCase(problemInfo.title)}.py</p>
               </div>
             )}
           </CardContent>
@@ -190,18 +272,18 @@ ${notes ? `\n# Notes\n# ${notes.split('\n').join('\n# ')}` : ''}
         </Card>
       </div>
 
-      <Card className="shadow-card">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <FileText className="h-5 w-5 text-primary" />
-            Notes & Insights
-          </CardTitle>
-          <CardDescription>
-            Add your notes, time complexity, approach, etc.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
+      <div className="grid gap-6 md:grid-cols-2">
+        <Card className="shadow-card">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5 text-primary" />
+              Notes & Insights
+            </CardTitle>
+            <CardDescription>
+              Add your notes, time complexity, approach, etc.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
             <Textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
@@ -214,19 +296,76 @@ Key insights:
 - ..."
               className="min-h-[120px]"
             />
-            
-            <Button 
-              onClick={generatePythonFile}
-              disabled={!problemData || !solution.trim()}
-              className="w-full bg-success hover:bg-success/90 text-success-foreground shadow-elegant"
-              size="lg"
-            >
-              <Download className="mr-2 h-5 w-5" />
-              Generate & Download Python File
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-card">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Github className="h-5 w-5 text-primary" />
+              GitHub Integration
+            </CardTitle>
+            <CardDescription>
+              Connect to GitHub and select repository
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {!isGithubConnected ? (
+              <Button 
+                onClick={handleGitHubAuth}
+                className="w-full"
+                variant="outline"
+              >
+                <Github className="mr-2 h-4 w-4" />
+                Connect GitHub
+              </Button>
+            ) : (
+              <div className="space-y-3">
+                <div className="space-y-2">
+                  <Label htmlFor="repo-select">Select Repository</Label>
+                  <Select value={selectedRepo} onValueChange={setSelectedRepo}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a repository" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="IslamTayeb/islam-x-neetcode-150">
+                        IslamTayeb/islam-x-neetcode-150 (default)
+                      </SelectItem>
+                      {githubRepos.map((repo) => (
+                        <SelectItem key={repo.id} value={repo.full_name}>
+                          {repo.full_name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <Button 
+          onClick={downloadFile}
+          disabled={!problemInfo || !solution.trim()}
+          className="bg-accent hover:bg-accent/90 text-accent-foreground"
+          size="lg"
+        >
+          <Download className="mr-2 h-5 w-5" />
+          Download Python File
+        </Button>
+
+        <Button 
+          onClick={generateAndCommitFile}
+          disabled={!problemInfo || !solution.trim() || !isGithubConnected || isLoading}
+          className="bg-success hover:bg-success/90 text-success-foreground shadow-elegant"
+          size="lg"
+        >
+          <Github className="mr-2 h-5 w-5" />
+          {isLoading ? "Committing..." : "Commit to GitHub"}
+        </Button>
+      </div>
     </div>
   );
 };
