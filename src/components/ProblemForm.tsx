@@ -80,8 +80,34 @@ export const ProblemForm = () => {
   };
 
   const handleGitHubAuth = () => {
-    const authUrl = GitHubService.getAuthUrl();
-    window.open(authUrl, '_blank', 'width=600,height=700');
+    const token = prompt(
+      "Please enter your GitHub Personal Access Token:\n\n" +
+      "1. Go to GitHub Settings > Developer settings > Personal access tokens\n" +
+      "2. Generate a new token with 'repo' scope\n" +
+      "3. Copy and paste the token here"
+    );
+    
+    if (token) {
+      GitHubService.setAccessToken(token);
+      setIsGithubConnected(true);
+      
+      // Test the token and fetch repos
+      GitHubService.getUserRepos().then(repos => {
+        setGithubRepos(repos);
+        toast({
+          title: "GitHub Connected",
+          description: "Successfully connected to GitHub!",
+        });
+      }).catch(() => {
+        GitHubService.removeAccessToken();
+        setIsGithubConnected(false);
+        toast({
+          title: "Invalid Token",
+          description: "Please check your Personal Access Token",
+          variant: "destructive",
+        });
+      });
+    }
   };
 
   const generateAndCommitFile = async () => {

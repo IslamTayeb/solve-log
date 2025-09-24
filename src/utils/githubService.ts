@@ -12,20 +12,6 @@ interface GitHubUser {
 }
 
 export class GitHubService {
-  private static readonly CLIENT_ID = 'Ov23liQQhCTZndrCtqCL'; // GitHub OAuth App for Interview Prep
-  private static readonly REDIRECT_URI = window.location.origin + '/auth/github/callback';
-  private static readonly SCOPE = 'repo';
-
-  static getAuthUrl(): string {
-    const params = new URLSearchParams({
-      client_id: this.CLIENT_ID,
-      redirect_uri: this.REDIRECT_URI,
-      scope: this.SCOPE,
-      state: Math.random().toString(36).substring(7)
-    });
-    
-    return `https://github.com/login/oauth/authorize?${params.toString()}`;
-  }
 
   static getAccessToken(): string | null {
     return localStorage.getItem('github_access_token');
