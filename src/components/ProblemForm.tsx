@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Download, Globe, Code, FileText, Github } from "lucide-react";
 import { URLParser, ProblemInfo } from "@/utils/urlParser";
 import { GitHubService } from "@/utils/githubService";
+import MDEditor from '@uiw/react-md-editor';
 
 interface GitHubRepo {
   id: number;
@@ -159,6 +160,12 @@ ${notes ? `\n# Notes\n# ${notes.split('\n').join('\n# ')}` : ''}
           title: "Success",
           description: `Committed ${fileName} to ${selectedRepo}`,
         });
+        
+        // Reset form fields on successful commit
+        setUrl('');
+        setSolution('');
+        setNotes('');
+        setProblemInfo(null);
       } else {
         toast({
           title: "Error",
@@ -310,18 +317,22 @@ ${notes ? `\n# Notes\n# ${notes.split('\n').join('\n# ')}` : ''}
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Textarea
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Time Complexity: O(n)
-Space Complexity: O(n)
+            <div data-color-mode="auto">
+              <MDEditor
+                value={notes}
+                onChange={(val) => setNotes(val || '')}
+                preview="edit"
+                hideToolbar={false}
+                data-placeholder="**Time Complexity:** O(n)  
+**Space Complexity:** O(n)
 
-Approach: Use a hash map to store complements...
+## Approach
+Use a hash map to store complements...
 
-Key insights:
+## Key insights:
 - ..."
-              className="min-h-[120px]"
-            />
+              />
+            </div>
           </CardContent>
         </Card>
 
